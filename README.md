@@ -43,9 +43,9 @@ inconclusive elections.
 
 ### Leader
 
-- lastCommittedIndex: highest index in log it knows to be committed.
-- nextIndex[]: list of nextIndex to write in each workers log
-
+- State
+  - lastCommittedIndex: highest index in log it knows to be committed.
+  - nextIndex[]: list of nextIndex to write in each workers log
 
 - onEnter
   - Init follower's nextIndex to local log index + 1.
@@ -61,5 +61,4 @@ inconclusive elections.
 ## WAL
 
 - logIndex : counter that increments per log entry
-- 
 
