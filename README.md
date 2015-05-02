@@ -1,4 +1,5 @@
-# Canoe: A raft implementation
+# Canoe
+A basic raft implementation. Intro to programming with akka actors.
 
 Terms: Mark the beginning and end of an election and the reign of a leadership
 
