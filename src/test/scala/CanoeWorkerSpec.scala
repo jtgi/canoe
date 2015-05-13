@@ -1,6 +1,12 @@
 import akka.actor.{Props, ActorSystem}
 import akka.testkit.{TestFSMRef, TestActorRef, ImplicitSender, TestKit}
+import com.typesafe.config.{Config, ConfigFactory}
+import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.concurrent._
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.{Milliseconds, Span}
 import org.scalatest.{FlatSpecLike, BeforeAndAfterAll, Matchers}
+import scala.concurrent.Await
 import scala.concurrent.duration._
 
 /**
@@ -14,6 +20,8 @@ class CanoeWorkerSpec(_system: ActorSystem)
   with BeforeAndAfterAll {
 
   def this() = this(ActorSystem("CanoeWorkerSpec"))
+  implicit val testConfig = ConfigFactory.parseString(CanoeWorkerSpec.config)
+  val conf = new CanoeConfig(testConfig)
 
   override def afterAll: Unit = {
     system.shutdown()
@@ -23,11 +31,49 @@ class CanoeWorkerSpec(_system: ActorSystem)
   "A canoe worker" should "be initialized to the Follower state" in {
     val fsm = TestFSMRef(new CanoeWorker)
     fsm.stateName should be (Follower)
+    fsm.stop()
   }
 
-  "A follower" should "transition to candidate after timing out" in ???
-  "A follower" should "treat AppendEntries as a heartbeat when there is no entry data" in ???
+  "A follower" should "transition to candidate after timing out" in {
+    val fsm = TestFSMRef(new CanoeWorker)
+    val timeout = conf.electionTimeoutMax millis
+
+    awaitCond(fsm.stateName == Candidate, timeout * 2, 1 millis, "is candidate")
+    fsm.stop()
+  }
+
+  "A follower" should "reset timer when a WorkerState message is received" in {
+    val fsm = TestFSMRef(new CanoeWorker)
+
+    assert (conf.electionTimeoutMin == conf.electionTimeoutMax)
+
+    Thread.sleep(conf.electionTimeoutMin - 50)
+    fsm.stateName should be (Follower)
+    fsm ! WorkerState
+
+    Thread.sleep(conf.electionTimeoutMin - 50)
+    fsm.stateName should be (Follower)
+    fsm ! WorkerState
+
+    Thread.sleep(conf.electionTimeoutMin - 50)
+    fsm.stateName should be (Follower)
+    fsm ! WorkerState
+
+    Thread.sleep(conf.electionTimeoutMin - 50)
+    fsm.stateName should be (Follower)
+    fsm ! WorkerState
+
+    Thread.sleep(conf.electionTimeoutMin - 50)
+    fsm ! "unknown msg" //should not reset timer
+    fsm.stateName should be (Follower)
+    Thread.sleep(100)
+    fsm.stateName should be (Candidate)
+
+    fsm.stop()
+  }
+
   "A follower" should "refuse an AppendEntries command when its log does not contain the (prevLogIndex, prevLogTerm)" in ???
+
   "A follower" should "be sent a diff of the log when its log is out of date" in ???
   "A follower" should "deny its vote when a candidate has a shorter log" in ???
   "A follower" should "deny its vote when a candidates log has a lower term" in ???
@@ -53,3 +99,18 @@ class CanoeWorkerSpec(_system: ActorSystem)
   "Two log entries" should "be identical when they have the same index and term" in ???
   "Two logs" should "be identical up to the same index and term" in ???
 }
+
+object CanoeWorkerSpec {
+  // Define your test specific configuration here
+  val config = """
+    canoe {
+      election-timeout-min = 200
+      election-timeout-max = 200
+      state-timeout = 100
+    }
+    akka {
+      loglevel = "WARNING"
+    }
+               """
+}
+
